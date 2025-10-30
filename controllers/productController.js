@@ -1,51 +1,60 @@
+// controllers/productController.js
 const Product = require("../models/productModel");
 const Category = require("../models/categoryModel");
 const Brand = require("../models/brandModel");
-const dotenv = require("dotenv");
-
-dotenv.config();
 
 /**
  * Create a new product
  */
 exports.createProduct = async (req, res) => {
   try {
-    const { title, description, category, brand, price } = req.body;
+    const {
+      productId,
+      title,
+      description,
+      category, // id
+      brand, // id
+      price,
+      productSpecifications,
+    } = req.body;
 
-    // ✅ Validate required fields
-    if (!title || !description || !price) {
-      return res.status(400).json({ message: "Please fill in all required fields" });
+    // Validate required fields
+    if (!title || !description || price === undefined || !category || !brand) {
+      return res.status(400).json({ message: "Please fill in all required fields: title, description, price, category, brand" });
     }
 
-    // ✅ Validate category and brand existence
-    const foundCategory = category ? await Category.findById(category) : null;
-    const foundBrand = brand ? await Brand.findById(brand) : null;
+    // Confirm category & brand exist
+    const foundCategory = await Category.findById(category);
+    if (!foundCategory) return res.status(400).json({ message: "Invalid category ID" });
 
-    if (category && !foundCategory) {
-      return res.status(400).json({ message: "Invalid category ID" });
-    }
-    if (brand && !foundBrand) {
-      return res.status(400).json({ message: "Invalid brand ID" });
-    }
+    const foundBrand = await Brand.findById(brand);
+    if (!foundBrand) return res.status(400).json({ message: "Invalid brand ID" });
 
-    // ✅ Create product
-    const newProduct = new Product({ title, description, category, brand, price });
+    // Create product
+    const newProduct = new Product({
+      productId,
+      title,
+      description,
+      category,
+      brand,
+      price,
+      productSpecifications,
+    });
+
     await newProduct.save();
 
-    res.status(201).json({
-      message: "Product created successfully",
-      product: newProduct,
-    });
+    res.status(201).json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to create product",
-      details: error.message,
-    });
+    // handle duplicate key error for unique fields
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Duplicate value", details: error.keyValue });
+    }
+    res.status(500).json({ message: "Unable to create product", details: error.message });
   }
 };
 
 /**
- * Get all products (with filtering, pagination, and sorting)
+ * Get all products with filtering, pagination, sorting
  */
 exports.getAllProducts = async (req, res) => {
   try {
@@ -63,7 +72,6 @@ exports.getAllProducts = async (req, res) => {
 
     const filter = {};
 
-    // 🔍 Search by title, brand, or category
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
@@ -71,27 +79,22 @@ exports.getAllProducts = async (req, res) => {
       ];
     }
 
-    // 🎯 Filter by category and brand
     if (category) filter.category = category;
     if (brand) filter.brand = brand;
 
-    // 💰 Filter by price range
-    if (minPrice || maxPrice) {
+    if (minPrice !== undefined || maxPrice !== undefined) {
       filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
+      if (minPrice !== undefined) filter.price.$gte = Number(minPrice);
+      if (maxPrice !== undefined) filter.price.$lte = Number(maxPrice);
     }
 
-    // 🧮 Pagination setup
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.max(parseInt(limit) || 10, 1);
     const skip = (pageNum - 1) * limitNum;
 
-    // 🧾 Field selection and sorting
     const selectFields = fields ? fields.split(",").join(" ") : "";
-    const sortBy = sort || "-createdAt";
+    const sortBy = sort;
 
-    // 🔎 Query
     const products = await Product.find(filter)
       .sort(sortBy)
       .select(selectFields)
@@ -110,68 +113,45 @@ exports.getAllProducts = async (req, res) => {
       products,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to retrieve products",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to retrieve products", details: error.message });
   }
 };
 
 /**
- * Get products by category name
+ * Get products by category title (human-friendly)
  */
 exports.getProductByCategory = async (req, res) => {
   try {
     const { categoryName } = req.params;
-
     const category = await Category.findOne({ title: categoryName });
-    if (!category) {
-      return res.status(404).json({ message: "Category not found" });
-    }
+    if (!category) return res.status(404).json({ message: "Category not found" });
 
     const products = await Product.find({ category: category._id })
       .populate("brand", "name")
       .populate("category", "title");
 
-    res.status(200).json({
-      total: products.length,
-      category: categoryName,
-      products,
-    });
+    res.status(200).json({ total: products.length, category: categoryName, products });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to retrieve products by category",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to retrieve products by category", details: error.message });
   }
 };
 
 /**
- * Get products by brand name
+ * Get products by brand name (human-friendly)
  */
 exports.getProductByBrand = async (req, res) => {
   try {
     const { brandName } = req.params;
-
     const brand = await Brand.findOne({ name: brandName });
-    if (!brand) {
-      return res.status(404).json({ message: "Brand not found" });
-    }
+    if (!brand) return res.status(404).json({ message: "Brand not found" });
 
     const products = await Product.find({ brand: brand._id })
       .populate("brand", "name")
       .populate("category", "title");
 
-    res.status(200).json({
-      total: products.length,
-      brand: brandName,
-      products,
-    });
+    res.status(200).json({ total: products.length, brand: brandName, products });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to retrieve products by brand",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to retrieve products by brand", details: error.message });
   }
 };
 
@@ -182,20 +162,12 @@ exports.getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
 
-    const product = await Product.findById(productId)
-      .populate("brand", "name")
-      .populate("category", "title");
-
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    const product = await Product.findById(productId).populate("brand", "name").populate("category", "title");
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
     res.status(200).json(product);
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to retrieve product by ID",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to retrieve product by ID", details: error.message });
   }
 };
 
@@ -205,31 +177,23 @@ exports.getProductById = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { title, description, category, brand, price } = req.body;
+    const { title, description, category, brand, price, productSpecifications } = req.body;
 
     const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Update only provided fields
     if (title) product.title = title;
     if (description) product.description = description;
     if (category) product.category = category;
     if (brand) product.brand = brand;
-    if (price) product.price = price;
+    if (price !== undefined) product.price = price;
+    if (productSpecifications) product.productSpecifications = productSpecifications;
 
     await product.save();
 
-    res.status(200).json({
-      message: "Product updated successfully",
-      product,
-    });
+    res.status(200).json({ message: "Product updated successfully", product });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to update product",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to update product", details: error.message });
   }
 };
 
@@ -239,18 +203,11 @@ exports.updateProduct = async (req, res) => {
 exports.deleteProduct = async (req, res) => {
   try {
     const { productId } = req.params;
-
     const product = await Product.findByIdAndDelete(productId);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
     res.status(200).json({ message: "Product deleted successfully" });
   } catch (error) {
-    res.status(500).json({
-      message: "Unable to delete product",
-      details: error.message,
-    });
+    res.status(500).json({ message: "Unable to delete product", details: error.message });
   }
 };
-

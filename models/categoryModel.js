@@ -1,25 +1,34 @@
-// models/categoryModel.js
 const mongoose = require("mongoose");
 
 const categorySchema = new mongoose.Schema({
-  // optional categoryId
   categoryId: {
     type: String,
     unique: true,
     sparse: true,
+    trim: true
   },
   title: {
     type: String,
-    required: true,
+    required: [true, 'Category title is required'],
     unique: true,
     trim: true,
-    maxlength: 100,
+    maxlength: [100, 'Title cannot exceed 100 characters']
   },
   description: {
     type: String,
     trim: true,
     default: "",
+    maxlength: [500, 'Description cannot exceed 500 characters']
   },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
 });
+
+// Index for faster searches
+categorySchema.index({ title: 1 });
 
 module.exports = mongoose.model("Category", categorySchema);

@@ -1,60 +1,78 @@
-// models/productModel.js
 const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema({
-  // optional external product identifier (if you want it)
   productId: {
     type: String,
     unique: true,
-    sparse: true, // allow missing productId for legacy docs
+    sparse: true,
+    trim: true
   },
-
-  // simplified/consistent field names
-  title: {
+  name: {
     type: String,
-    required: true,
+    required: [true, 'Product title is required'],
     unique: true,
     trim: true,
-    maxlength: 100,
+    maxlength: [100, 'Title cannot exceed 100 characters']
   },
-
   description: {
     type: String,
-    required: true,
+    required: [true, 'Description is required'],
     trim: true,
-    minlength: 10,
-    maxlength: 1000,
+    minlength: [10, 'Description must be at least 10 characters'],
+    maxlength: [1000, 'Description cannot exceed 1000 characters']
   },
-
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Category",
-    required: true,
+    required: [true, 'Category is required'],
+    index: true
   },
-
   brand: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Brand",
-    required: true,
+    required: [true, 'Brand is required'],
+    index: true
   },
-
   price: {
     type: Number,
-    required: true,
-    min: 0,
+    required: [true, 'Price is required'],
+    min: [0, 'Price cannot be negative'],
+    get: v => Math.round(v * 100) / 100 // Round to 2 decimals
   },
-
-  // productSpecifications: object/map of key->value strings
+  stock: {
+    type: Number,
+    default: 0,
+    min: [0, 'Stock cannot be negative']
+  },
+  images: [{
+    type: String,
+    trim: true
+  }],
   productSpecifications: {
     type: Map,
     of: String,
-    default: {},
+    default: {}
   },
+  isActive: {
+    type: Boolean,
+    default: true,
+    index: true
+  }
+}, {
+  timestamps: true,
+  toJSON: { getters: true },
+  toObject: { getters: true }
+});
 
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+// Compound indexes for common queries
+productSchema.index({ category: 1, isActive: 1 });
+productSchema.index({ brand: 1, isActive: 1 });
+productSchema.index({ price: 1, isActive: 1 });
+productSchema.index({ title: 'text', description: 'text' });
+
+// Virtual for stock status
+productSchema.virtual('inStock').get(function() {
+  return this.stock > 0;
 });
 
 module.exports = mongoose.model("Product", productSchema);

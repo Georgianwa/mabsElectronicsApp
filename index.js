@@ -1,10 +1,12 @@
-// index.js
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
 const morgan = require("morgan");
 const cors = require("cors");
+const helmet = require("helmet");
+const { body, validationResult } = require("express-validator");
+const jwt = require("jsonwebtoken");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swaggerConfig");
 const connectDB = require("./config/dbConfig");
@@ -13,7 +15,6 @@ const connectDB = require("./config/dbConfig");
 const productRoutes = require("./routes/productRoutes");
 const brandRoutes = require("./routes/brandRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
-const aboutRoutes = require("./routes/adminRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -27,68 +28,299 @@ connectDB();
 app.set("view engine", "ejs");
 app.set("views", "./views");
 
-// === MIDDLEWARES ===
-app.use(cors());
-app.use(morgan("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// === SECURITY ===
+app.use(helmet());
+
+// === CORS ===
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+
+// === LOGGING ===
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('combined'));
+} else {
+  app.use(morgan('dev'));
+}
+
+// === BODY PARSERS ===
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static("public"));
 
-// === SESSION CONFIG ===
+// === SESSION ===
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "supersecretkey",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     store: MongoStore.create({
       mongoUrl: process.env.MONGODB_URI,
       collectionName: "sessions",
+      ttl: 24 * 60 * 60
     }),
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
-      secure: false, // set true in production (HTTPS)
+      maxAge: 1000 * 60 * 60 * 24,
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: 'lax'
     },
+    name: 'sessionId'
   })
 );
 
-// === ROUTES ===
-app.use("/products", productRoutes);
-app.use("/brands", brandRoutes);
-app.use("/categories", categoryRoutes);
-app.use("/aboutUs", aboutRoutes);
-app.use("/contactUs", contactRoutes);
-app.use("/api/admin", adminRoutes);
+// === CONFIG ===
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
 
+// === JWT AUTH MIDDLEWARE ===
+function verifyAdminToken(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ 
+      status: 'error', 
+      message: 'Authentication required' 
+    });
+  }
 
-// session-based cart
-app.use("/api/cart", cartRoutes);
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.adminUser = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ 
+      status: 'error', 
+      message: 'Invalid or expired token'
+    });
+  }
+}
+
+function checkAdminForWrite(req, res, next) {
+  if (req.method === 'GET') {
+    next();
+  } else {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ 
+        status: 'error', 
+        message: 'Authentication required for this action'
+      });
+    }
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.adminUser = decoded;
+      next();
+    } catch (err) {
+      return res.status(401).json({ 
+        status: 'error', 
+        message: 'Invalid authentication'
+      });
+    }
+  }
+}
 
 // === BASIC ROUTES ===
 app.get("/", (req, res) => {
-  res.send("Welcome to MABS Electronics API");
+  res.json({ 
+    message: "Welcome to MABS Electronics API",
+    version: "1.0.0",
+    documentation: "/api-docs"
+  });
 });
 
-app.get("/test", (req, res) => {
-  res.send("Testing the routes");
+app.get("/health", (req, res) => {
+  res.status(200).json({ 
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
+
+// === ADMIN LOGIN (Database-based) ===
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Username and password required'
+      });
+    }
+
+    // Use adminController to validate credentials
+    const Admin = require("./models/adminModel");
+    const admin = await Admin.findOne({ username }).select("+password");
+    
+    if (!admin) {
+      console.warn(`❌ Failed login: ${username} - not found`);
+      return res.status(401).json({ 
+        status: 'error', 
+        message: 'Invalid credentials'
+      });
+    }
+
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      console.warn(`❌ Failed login: ${username} - wrong password`);
+      return res.status(401).json({ 
+        status: 'error', 
+        message: 'Invalid credentials'
+      });
+    }
+
+    // Create JWT token
+    const token = jwt.sign(
+      { id: admin._id, username: admin.username, isAdmin: true },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    req.session.isAdmin = true;
+    req.session.adminUsername = username;
+
+    console.log(`✅ Admin logged in: ${username}`);
+    return res.json({ 
+      status: 'success', 
+      message: 'Login successful',
+      user: username,
+      token: token
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ 
+      status: 'error', 
+      message: 'Login error',
+      error: err.message
+    });
+  }
+});
+
+// === ADMIN LOGOUT ===
+app.get('/api/admin/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ status: 'error', message: 'Logout failed' });
+    }
+    console.log('✅ Admin logged out');
+    res.json({ status: 'success', message: 'Logged out' });
+  });
+});
+
+// === TEMPORARY: Create First Admin ===
+// REMOVE THIS ROUTE AFTER CREATING YOUR FIRST ADMIN
+app.post('/create-first-admin', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        status: 'error',
+        message: 'Username and password required' 
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ 
+        status: 'error',
+        message: 'Password must be at least 8 characters' 
+      });
+    }
+
+    const Admin = require("./models/adminModel");
+    const existing = await Admin.findOne({ username });
+    
+    if (existing) {
+      return res.status(400).json({ 
+        status: 'error',
+        message: 'Admin already exists' 
+      });
+    }
+
+    const admin = await Admin.create({ username, password });
+    
+    console.log(`✅ Admin created: ${username}`);
+    res.json({ 
+      status: 'success',
+      message: 'Admin created successfully', 
+      admin: { id: admin._id, username: admin.username }
+    });
+  } catch (err) {
+    console.error('Error creating admin:', err);
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Error creating admin',
+      error: err.message 
+    });
+  }
+});
+
+// === API ROUTES ===
+// Products - Allow GET, require auth for POST/PUT/DELETE
+app.use("/api/products", checkAdminForWrite, productRoutes);
+
+// Brands - Allow GET, require auth for POST/PUT/DELETE
+app.use("/api/brands", checkAdminForWrite, brandRoutes);
+
+// Categories - Allow GET, require auth for POST/PUT/DELETE
+app.use("/api/categories", checkAdminForWrite, categoryRoutes);
+
+// Contact - Allow POST (public)
+app.use("/api/contact", contactRoutes);
+
+// Cart - Allow all
+app.use("/api/cart", cartRoutes);
+
+// Admin - Protected routes
+app.use("/api/admin", verifyAdminToken, adminRoutes);
 
 // === SWAGGER DOCS ===
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // === 404 HANDLER ===
-app.use((req, res, next) => {
-  res.status(404).json({ message: "Route not found" });
+app.use((req, res) => {
+  res.status(404).json({ 
+    status: 'error',
+    message: "Route not found",
+    path: req.originalUrl 
+  });
 });
 
 // === ERROR HANDLER ===
 app.use((err, req, res, next) => {
-  console.error("Server error:", err);
-  res.status(500).json({ message: "Internal server error", details: err.message });
+  console.error("Error:", err.stack);
+  
+  res.status(err.statusCode || 500).json({
+    status: 'error',
+    message: process.env.NODE_ENV === 'production' 
+      ? "Server error" 
+      : err.message
+  });
+});
+
+// === GRACEFUL SHUTDOWN ===
+process.on('SIGTERM', () => {
+  console.log('Shutting down...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 // === START SERVER ===
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
-  console.log(`📘 Swagger Docs at http://localhost:${PORT}/api-docs`);
+const server = app.listen(PORT, () => {
+  console.log(`✅ Backend running on port ${PORT}`);
+  console.log(`📘 Docs: http://localhost:${PORT}/api-docs`);
+  console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log(`🔐 Admin: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
 });
+
+module.exports = app;

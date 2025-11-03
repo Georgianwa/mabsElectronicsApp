@@ -1,4 +1,3 @@
-// models/brandModel.js
 const mongoose = require("mongoose");
 
 const brandSchema = new mongoose.Schema({
@@ -6,14 +5,24 @@ const brandSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true,
+    trim: true
   },
   name: {
     type: String,
-    required: true,
+    required: [true, 'Brand name is required'],
     unique: true,
     trim: true,
-    maxlength: 100,
+    maxlength: [100, 'Brand name cannot exceed 100 characters']
   },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
 });
+
+// Index for faster searches
+brandSchema.index({ name: 1 });
 
 module.exports = mongoose.model("Brand", brandSchema);

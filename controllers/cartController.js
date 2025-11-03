@@ -1,5 +1,4 @@
-// controllers/cartController.js
-const Cart = require("../models/cartModel");
+const Cart = require("../models/cartModel.js");
 const Product = require("../models/productModel");
 const transporter = require("../config/emailConfig");
 
@@ -7,14 +6,37 @@ const transporter = require("../config/emailConfig");
  * Helper: Calculate total
  */
 function calculateTotal(items) {
-  return items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  return items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
+}
+
+/**
+ * Helper: Validate cart item
+ */
+function validateCartItem(productId, name, price, quantity) {
+  const errors = [];
+  
+  if (!productId) errors.push("Product ID is required");
+  if (!name || name.trim() === "") errors.push("Product name is required");
+  if (price === undefined || price < 0) errors.push("Valid price is required");
+  if (quantity !== undefined && (quantity < 1 || !Number.isInteger(Number(quantity)))) {
+    errors.push("Quantity must be a positive integer");
+  }
+  
+  return errors;
 }
 
 /**
  * Get Cart (from session)
  */
 exports.getCart = (req, res) => {
-  res.status(200).json(req.session.cart || []);
+  const cart = req.session.cart || [];
+  const total = calculateTotal(cart);
+  
+  res.status(200).json({
+    items: cart,
+    total: total.toFixed(2),
+    itemCount: cart.reduce((sum, it) => sum + it.quantity, 0)
+  });
 };
 
 /**
@@ -24,26 +46,32 @@ exports.getCart = (req, res) => {
 exports.addItemToCart = (req, res) => {
   const { productId, name, price, quantity = 1 } = req.body;
 
+  const errors = validateCartItem(productId, name, price, quantity);
+  if (errors.length > 0) {
+    return res.status(400).json({ message: "Validation failed", errors });
+  }
+
   if (!req.session.cart) req.session.cart = [];
 
-  const existing = req.session.cart.find(
-    (it) => it.productId === productId
-  );
+  const existing = req.session.cart.find(it => it.productId === productId);
 
   if (existing) {
     existing.quantity += Number(quantity);
   } else {
     req.session.cart.push({
       productId,
-      name,
-      price,
+      name: name.trim(),
+      price: Number(price),
       quantity: Number(quantity),
     });
   }
 
+  const total = calculateTotal(req.session.cart);
+
   res.status(200).json({
     message: "Item added to cart",
     cart: req.session.cart,
+    total: total.toFixed(2)
   });
 };
 
@@ -53,20 +81,36 @@ exports.addItemToCart = (req, res) => {
  */
 exports.updateItemQuantity = (req, res) => {
   const { productId, quantity } = req.body;
-  if (!req.session.cart) return res.status(400).json({ message: "Cart is empty" });
 
-  const item = req.session.cart.find((it) => it.productId === productId);
-  if (!item) return res.status(404).json({ message: "Item not found" });
+  if (!productId) {
+    return res.status(400).json({ message: "Product ID is required" });
+  }
+
+  if (quantity === undefined || quantity < 0) {
+    return res.status(400).json({ message: "Valid quantity is required" });
+  }
+
+  if (!req.session.cart || req.session.cart.length === 0) {
+    return res.status(400).json({ message: "Cart is empty" });
+  }
+
+  const item = req.session.cart.find(it => it.productId === productId);
+  if (!item) {
+    return res.status(404).json({ message: "Item not found in cart" });
+  }
 
   if (Number(quantity) <= 0) {
-    req.session.cart = req.session.cart.filter((it) => it.productId !== productId);
+    req.session.cart = req.session.cart.filter(it => it.productId !== productId);
   } else {
     item.quantity = Number(quantity);
   }
 
+  const total = calculateTotal(req.session.cart);
+
   res.status(200).json({
     message: "Cart updated",
     cart: req.session.cart,
+    total: total.toFixed(2)
   });
 };
 
@@ -76,12 +120,28 @@ exports.updateItemQuantity = (req, res) => {
  */
 exports.removeItem = (req, res) => {
   const { productId } = req.body;
-  if (!req.session.cart) return res.status(400).json({ message: "Cart is empty" });
 
-  req.session.cart = req.session.cart.filter((it) => it.productId !== productId);
+  if (!productId) {
+    return res.status(400).json({ message: "Product ID is required" });
+  }
+
+  if (!req.session.cart || req.session.cart.length === 0) {
+    return res.status(400).json({ message: "Cart is empty" });
+  }
+
+  const initialLength = req.session.cart.length;
+  req.session.cart = req.session.cart.filter(it => it.productId !== productId);
+
+  if (req.session.cart.length === initialLength) {
+    return res.status(404).json({ message: "Item not found in cart" });
+  }
+
+  const total = calculateTotal(req.session.cart);
+
   res.status(200).json({
     message: "Item removed",
     cart: req.session.cart,
+    total: total.toFixed(2)
   });
 };
 
@@ -90,7 +150,7 @@ exports.removeItem = (req, res) => {
  */
 exports.clearCart = (req, res) => {
   req.session.cart = [];
-  res.status(200).json({ message: "Cart cleared" });
+  res.status(200).json({ message: "Cart cleared", cart: [] });
 };
 
 /**
@@ -101,48 +161,74 @@ exports.checkoutWhatsApp = (req, res) => {
   const phone = req.query.phone;
   const cart = req.session.cart || [];
 
-  if (!phone) return res.status(400).json({ message: "WhatsApp phone number is required" });
-  if (cart.length === 0) return res.status(400).json({ message: "Cart is empty" });
+  if (!phone || phone.trim() === "") {
+    return res.status(400).json({ message: "WhatsApp phone number is required" });
+  }
+
+  if (cart.length === 0) {
+    return res.status(400).json({ message: "Cart is empty" });
+  }
 
   const total = calculateTotal(cart);
   const itemList = cart.map(
-    (it) => `• ${it.name} (x${it.quantity}) - $${(it.price * it.quantity).toFixed(2)}`
+    it => `• ${it.name} (x${it.quantity}) - $${(it.price * it.quantity).toFixed(2)}`
   ).join("\n");
 
-  const message = `Hello there! I want to purchase the following item(s) and would like to confirm availability before payment:\n\n${itemList}\n\n*Total:* $${total.toFixed(2)}`;
+  const message = `Hello! I would like to purchase the following items:\n\n${itemList}\n\n*Total: $${total.toFixed(2)}*\n\nPlease confirm availability.`;
   const encodedMessage = encodeURIComponent(message);
+  const sanitizedPhone = phone.replace(/[^\d+]/g, '');
 
-  const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
-  res.status(200).json({ whatsappUrl });
+  const whatsappUrl = `https://wa.me/${sanitizedPhone}?text=${encodedMessage}`;
+  
+  res.status(200).json({ 
+    whatsappUrl,
+    message: "WhatsApp checkout URL generated"
+  });
 };
 
 /**
  * Checkout via Email
  * Body: { toEmail }
+ * FIXED: Was using undefined 'email' variable
  */
 exports.checkoutEmail = async (req, res) => {
   const { toEmail } = req.body;
   const cart = req.session.cart || [];
 
-  if (!toEmail) return res.status(400).json({ message: "Recipient email is required" });
-  if (cart.length === 0) return res.status(400).json({ message: "Cart is empty" });
+  if (!toEmail || !toEmail.includes('@')) {
+    return res.status(400).json({ message: "Valid recipient email is required" });
+  }
+
+  if (cart.length === 0) {
+    return res.status(400).json({ message: "Cart is empty" });
+  }
 
   const total = calculateTotal(cart);
   const itemList = cart.map(
-    (it) => `${it.name} (x${it.quantity}) - $${(it.price * it.quantity).toFixed(2)}`
+    it => `${it.name} (x${it.quantity}) - $${(it.price * it.quantity).toFixed(2)}`
   ).join("\n");
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
-    to: email,
+    to: toEmail,
     subject: "Purchase Inquiry - Cart Items",
-    text: `Hello there! I want to purchase the following item(s) and would like to confirm availability before payment:\n\n${itemList}\n\nTotal: $${total.toFixed(2)}`
+    text: `Hello! I would like to purchase the following items:\n\n${itemList}\n\nTotal: $${total.toFixed(2)}\n\nPlease confirm availability and payment details.`,
+    html: `
+      <h2>Purchase Inquiry</h2>
+      <p>Hello! I would like to purchase the following items:</p>
+      <ul>
+        ${cart.map(it => `<li>${it.name} (x${it.quantity}) - $${(it.price * it.quantity).toFixed(2)}</li>`).join('')}
+      </ul>
+      <h3>Total: $${total.toFixed(2)}</h3>
+      <p>Please confirm availability and payment details.</p>
+    `
   };
 
   try {
     await transporter.sendMail(mailOptions);
     res.status(200).json({ message: "Checkout email sent successfully" });
   } catch (error) {
+    console.error("Email send error:", error);
     res.status(500).json({ message: "Error sending email", details: error.message });
   }
 };

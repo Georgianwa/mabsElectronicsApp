@@ -14,6 +14,10 @@ const brandSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Brand name cannot exceed 100 characters']
   },
+  image: {
+    url: { type: String, default: "" },
+    //publicId: { type: String, default: "" }
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -1,8 +1,9 @@
+// controllers/brandController.js
 const Brand = require("../models/brandModel");
 
 exports.createBrand = async (req, res) => {
   try {
-    const { name, brandId } = req.body;
+    const { name, brandId, image } = req.body;
 
     if (!name || name.trim() === "") {
       return res.status(400).json({ message: "Brand name is required" });
@@ -16,9 +17,29 @@ exports.createBrand = async (req, res) => {
       return res.status(400).json({ message: "Brand already exists" });
     }
 
-    const brand = await Brand.create({ name: name.trim(), brandId });
+    const brandData = {
+      name: name.trim()
+    };
 
-    res.status(201).json({ message: "Brand created successfully", brand });
+    // Add optional fields if provided
+    if (brandId) brandData.brandId = brandId;
+    
+    // Handle image field properly
+    if (image) {
+      // Support both string URL and object format
+      if (typeof image === 'string') {
+        brandData.image = { url: image };
+      } else if (image.url) {
+        brandData.image = { url: image.url };
+      }
+    }
+
+    const brand = await Brand.create(brandData);
+
+    res.status(201).json({ 
+      message: "Brand created successfully", 
+      brand 
+    });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ 
@@ -27,7 +48,10 @@ exports.createBrand = async (req, res) => {
       });
     }
     console.error("Create brand error:", error);
-    res.status(500).json({ message: "Unable to create brand", error: error.message });
+    res.status(500).json({ 
+      message: "Unable to create brand", 
+      error: error.message 
+    });
   }
 };
 
@@ -60,7 +84,10 @@ exports.getAllBrands = async (req, res) => {
     });
   } catch (error) {
     console.error("Get brands error:", error);
-    res.status(500).json({ message: "Unable to find brands", error: error.message });
+    res.status(500).json({ 
+      message: "Unable to find brands", 
+      error: error.message 
+    });
   }
 };
 
@@ -73,21 +100,38 @@ exports.getBrandById = async (req, res) => {
     res.status(200).json(brand);
   } catch (error) {
     console.error("Get brand by ID error:", error);
-    res.status(500).json({ message: "Brand does not exist", error: error.message });
+    res.status(500).json({ 
+      message: "Brand does not exist", 
+      error: error.message 
+    });
   }
 };
 
 exports.updateBrand = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, image } = req.body;
 
-    if (!name || name.trim() === "") {
-      return res.status(400).json({ message: "Brand name is required" });
+    const updateData = {};
+    
+    if (name) {
+      if (name.trim() === "") {
+        return res.status(400).json({ message: "Brand name cannot be empty" });
+      }
+      updateData.name = name.trim();
+    }
+
+    // Handle image updates
+    if (image) {
+      if (typeof image === 'string') {
+        updateData.image = { url: image };
+      } else if (image.url) {
+        updateData.image = { url: image.url };
+      }
     }
 
     const brand = await Brand.findByIdAndUpdate(
       req.params.id, 
-      { name: name.trim() }, 
+      updateData, 
       { new: true, runValidators: true }
     );
 
@@ -95,10 +139,16 @@ exports.updateBrand = async (req, res) => {
       return res.status(404).json({ message: "Brand not found" });
     }
 
-    res.status(200).json({ message: "Brand updated successfully", brand });
+    res.status(200).json({ 
+      message: "Brand updated successfully", 
+      brand 
+    });
   } catch (error) {
     console.error("Update brand error:", error);
-    res.status(500).json({ message: "Unable to update brand", error: error.message });
+    res.status(500).json({ 
+      message: "Unable to update brand", 
+      error: error.message 
+    });
   }
 };
 
@@ -108,9 +158,14 @@ exports.deleteBrand = async (req, res) => {
     if (!brand) {
       return res.status(404).json({ message: "Brand not found" });
     }
-    res.status(200).json({ message: `Brand '${brand.name}' deleted successfully` });
+    res.status(200).json({ 
+      message: `Brand '${brand.name}' deleted successfully` 
+    });
   } catch (error) {
     console.error("Delete brand error:", error);
-    res.status(500).json({ message: "Unable to delete brand", error: error.message });
+    res.status(500).json({ 
+      message: "Unable to delete brand", 
+      error: error.message 
+    });
   }
 };

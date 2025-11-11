@@ -10,18 +10,20 @@ exports.createProduct = async (req, res) => {
   try {
     const {
       productId,
-      name,
+      name,      
       description,
       category,
       brand,
       price,
+      stock,
+      images, 
       productSpecifications,
     } = req.body;
 
     // Validate required fields
-    if (!title || !description || price === undefined || !category || !brand) {
+    if (!name || !description || price === undefined || !category || !brand) {
       return res.status(400).json({ 
-        message: "Please fill in all required fields: title, description, price, category, brand" 
+        message: "Please fill in all required fields: name, description, price, category, brand" 
       });
     }
 
@@ -51,20 +53,26 @@ exports.createProduct = async (req, res) => {
     }
 
     // Create product
-    const newProduct = await Product.create({
-      productId,
-      title: title.trim(),
+    const productData = {
+      name: name.trim(),
       description: description.trim(),
       category,
       brand,
       price: Number(price),
-      productSpecifications,
-    });
+      productSpecifications: productSpecifications || {},
+    };
+
+    // Add optional fields if provided
+    if (productId) productData.productId = productId;
+    if (stock !== undefined) productData.stock = Number(stock);
+    if (images && Array.isArray(images)) productData.images = images;
+
+    const newProduct = await Product.create(productData);
 
     // Populate for response
     await newProduct.populate([
-      { path: 'category', select: 'title' },
-      { path: 'brand', select: 'name' }
+      { path: 'category', select: 'title image' },
+      { path: 'brand', select: 'name image' }
     ]);
 
     res.status(201).json({ 
@@ -74,7 +82,7 @@ exports.createProduct = async (req, res) => {
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ 
-        message: "Duplicate value", 
+        message: "Duplicate product name", 
         details: error.keyValue 
       });
     }
@@ -104,7 +112,7 @@ exports.getAllProducts = async (req, res) => {
 
     if (search) {
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
       ];
     }
@@ -135,8 +143,8 @@ exports.getAllProducts = async (req, res) => {
         .select(selectFields)
         .skip(skip)
         .limit(limitNum)
-        .populate("brand", "name")
-        .populate("category", "title")
+        .populate("brand", "name image")
+        .populate("category", "title image")
         .lean(),
       Product.countDocuments(filter)
     ]);
@@ -170,8 +178,8 @@ exports.getProductByCategory = async (req, res) => {
     }
 
     const products = await Product.find({ category: category._id })
-      .populate("brand", "name")
-      .populate("category", "title")
+      .populate("brand", "name image")
+      .populate("category", "title image")
       .lean();
 
     res.status(200).json({ 
@@ -201,8 +209,8 @@ exports.getProductByBrand = async (req, res) => {
     }
 
     const products = await Product.find({ brand: brand._id })
-      .populate("brand", "name")
-      .populate("category", "title")
+      .populate("brand", "name image")
+      .populate("category", "title image")
       .lean();
 
     res.status(200).json({ 
@@ -218,7 +226,6 @@ exports.getProductByBrand = async (req, res) => {
 
 /**
  * Get a single product by ID
- * FIXED: Changed param name to 'id' to match route
  */
 exports.getProductById = async (req, res) => {
   try {
@@ -229,8 +236,8 @@ exports.getProductById = async (req, res) => {
     }
 
     const product = await Product.findById(id)
-      .populate("brand", "name")
-      .populate("category", "title")
+      .populate("brand", "name image")
+      .populate("category", "title image")
       .lean();
 
     if (!product) {
@@ -246,12 +253,11 @@ exports.getProductById = async (req, res) => {
 
 /**
  * Update a product
- * FIXED: Changed param name to 'id'
  */
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, category, brand, price, productSpecifications } = req.body;
+    const { name, description, category, brand, price, stock, images, productSpecifications } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid product ID format" });
@@ -285,7 +291,7 @@ exports.updateProduct = async (req, res) => {
       product.brand = brand;
     }
 
-    if (title) product.title = title.trim();
+    if (name) product.name = name.trim();
     if (description) product.description = description.trim();
     if (price !== undefined) {
       if (price < 0) {
@@ -293,12 +299,14 @@ exports.updateProduct = async (req, res) => {
       }
       product.price = Number(price);
     }
+    if (stock !== undefined) product.stock = Number(stock);
+    if (images && Array.isArray(images)) product.images = images;
     if (productSpecifications) product.productSpecifications = productSpecifications;
 
     await product.save();
     await product.populate([
-      { path: 'category', select: 'title' },
-      { path: 'brand', select: 'name' }
+      { path: 'category', select: 'title image' },
+      { path: 'brand', select: 'name image' }
     ]);
 
     res.status(200).json({ message: "Product updated successfully", product });
@@ -310,7 +318,6 @@ exports.updateProduct = async (req, res) => {
 
 /**
  * Delete a product
- * FIXED: Changed param name to 'id'
  */
 exports.deleteProduct = async (req, res) => {
   try {

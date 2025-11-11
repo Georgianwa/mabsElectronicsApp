@@ -18,6 +18,8 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
+
 
 const app = express();
 
@@ -33,7 +35,7 @@ app.use(helmet());
 
 // === CORS ===
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -280,6 +282,9 @@ app.use("/api/cart", cartRoutes);
 
 // Admin - Protected routes
 app.use("/api/admin", verifyAdminToken, adminRoutes);
+
+//upload
+app.use('/api/upload', uploadRoutes);
 
 // === SWAGGER DOCS ===
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

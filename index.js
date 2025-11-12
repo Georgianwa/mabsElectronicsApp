@@ -325,7 +325,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Backend running on port ${PORT}`);
   console.log(`📘 Docs: http://localhost:${PORT}/api-docs`);
   console.log(`🏥 Health: http://localhost:${PORT}/health`);
-  console.log(`🔐 Admin: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD}`);
+  //console.log(`🔐 Admin: ${ADMIN_USER} / ${ADMIN_PASSWORD}`);
 });
 
 module.exports = app;

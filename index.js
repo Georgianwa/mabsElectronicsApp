@@ -35,7 +35,7 @@ app.use(helmet());
 
 // === CORS ===
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN,
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -54,24 +54,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static("public"));
 
 // === SESSION ===
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "supersecretkey",
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI,
-      collectionName: "sessions",
-      ttl: 24 * 60 * 60
-    }),
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24,
-      secure: process.env.NODE_ENV === 'production',
-      httpOnly: true,
-      sameSite: 'lax'
-    },
-    name: 'sessionId'
-  })
+app.use(session({
+  secret: process.env.SESSION_SECRET || "supersecretkey",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    collectionName: "sessions",
+    ttl: 24 * 60 * 60
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24,
+    secure: true, // Keep this true for production
+    httpOnly: true,
+    sameSite: 'none', // Changed from 'lax' to 'none' for cross-origin
+    domain: '.onrender.com' // Optional: allows subdomain sharing
+  },
+  name: 'sessionId'
+})
 );
 
 // === CONFIG ===

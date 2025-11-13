@@ -77,9 +77,9 @@ app.use(session({
 );
 
 // === CONFIG ===
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // === JWT AUTH MIDDLEWARE ===
 function verifyAdminToken(req, res, next) {
@@ -291,6 +291,61 @@ app.use('/api/upload', uploadRoutes);
 // === SWAGGER DOCS ===
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// Backend - Add proper error handling
+app.get('/api/brands', async (req, res) => {
+  try {
+    console.log('📦 Fetching brands...');
+    const Brand = require('./models/brandModel');
+    const brands = await Brand.find();
+    console.log(`✅ Found ${brands.length} brands`);
+    res.json(brands);
+  } catch (error) {
+    console.error('❌ Get brands error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Failed to fetch brands',
+      error: error.message 
+    });
+  }
+});
+
+app.get('/api/categories', async (req, res) => {
+  try {
+    console.log('📦 Fetching categories...');
+    const Category = require('./models/categoryModel');
+    const categories = await Category.find();
+    console.log(`✅ Found ${categories.length} categories`);
+    res.json(categories);
+  } catch (error) {
+    console.error('❌ Get categories error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Failed to fetch categories',
+      error: error.message 
+    });
+  }
+});
+
+app.get('/api/products', async (req, res) => {
+  try {
+    console.log('📦 Fetching products...');
+    const Product = require('./models/productModel');
+    const products = await Product.find();
+    console.log(`✅ Found ${products.length} products`);
+    res.json(products);
+  } catch (error) {
+    console.error('❌ Get products error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Failed to fetch products',
+      error: error.message 
+    });
+  }
+});
+
 // === 404 HANDLER ===
 app.use((req, res) => {
   res.status(404).json({ 
@@ -318,6 +373,17 @@ process.on('SIGTERM', () => {
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
+  });
+});
+
+// Global error handler - put this at the very end
+app.use((err, req, res, next) => {
+  console.error('💥 Unhandled error:', err.message);
+  console.error('Stack:', err.stack);
+  res.status(500).json({ 
+    status: 'error',
+    message: 'Internal server error',
+    error: err.message 
   });
 });
 

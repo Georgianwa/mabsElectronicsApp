@@ -346,6 +346,48 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
+// Backend - /api/products
+app.post('/api/products', async (req, res) => {
+  try {
+    console.log('📦 Backend: Creating product...');
+    console.log('Request body:', req.body);
+    
+    const Product = require('./models/productModel');
+    
+    const productData = {
+      name: req.body.name,
+      brand: req.body.brand,
+      category: req.body.category,
+      price: parseFloat(req.body.price),
+      description: req.body.description,
+      featured: req.body.featured === true || req.body.featured === 'true',
+      images: Array.isArray(req.body.images) ? req.body.images : [req.body.images],
+      specifications: req.body.specifications || {}
+    };
+    
+    console.log('Creating product with data:', productData);
+    
+    const product = await Product.create(productData);
+    
+    console.log('✅ Product created:', product._id);
+    
+    res.status(201).json({
+      status: 'success',
+      data: product
+    });
+    
+  } catch (error) {
+    console.error('❌ Backend: Create product error:', error.message);
+    console.error('Stack:', error.stack);
+    
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Failed to create product',
+      error: error.message 
+    });
+  }
+});
+
 // === 404 HANDLER ===
 app.use((req, res) => {
   res.status(404).json({ 

@@ -39,10 +39,10 @@ const productSchema = new mongoose.Schema({
     min: [0, 'Price cannot be negative'],
     get: v => Math.round(v * 100) / 100 // Round to 2 decimals
   },
-  images: [{
-    type: String,
-    trim: true
-  }],
+  image: {
+    url: { type: String, default: "" },
+    //publicId: { type: String, default: "" }
+  },
   productSpecifications: {
     type: Map,
     of: String,

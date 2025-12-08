@@ -24,14 +24,12 @@ exports.createCategory = async (req, res) => {
     
     // Handle image field properly
     if (image) {
-      // Support both string URL and object format
-      if (typeof image === 'string') {
+      if (typeof image === 'object' && image.url) {
+        categoryData.image = image;
+      } else if (typeof image === 'string') {
         categoryData.image = { url: image };
-      } else if (image.url) {
-        categoryData.image = { url: image.url };
       }
     }
-
     const category = await Category.create(categoryData);
     
     res.status(201).json({ 

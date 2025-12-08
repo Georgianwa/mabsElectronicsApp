@@ -4,36 +4,24 @@ const Brand = require("../models/brandModel");
 exports.createBrand = async (req, res) => {
   try {
     const { name, brandId, image } = req.body;
-
-    if (!name || name.trim() === "") {
-      return res.status(400).json({ message: "Brand name is required" });
-    }
-
-    const existingBrand = await Brand.findOne({ 
-      name: { $regex: `^${name.trim()}$`, $options: 'i' } 
-    });
     
-    if (existingBrand) {
-      return res.status(400).json({ message: "Brand already exists" });
-    }
-
     const brandData = {
-      name: name.trim()
+      name: name.trim(),
+      brandId: brandId,
+      image: {}
     };
-
-    // Add optional fields if provided
+    
     if (brandId) brandData.brandId = brandId;
     
-    // Handle image field properly
+    // ✅ Handle image properly
     if (image) {
-      // Support both string URL and object format
-      if (typeof image === 'string') {
-        brandData.image = { url: image };
-      } else if (image.url) {
-        brandData.image = { url: image.url };
+      if (typeof image === 'object' && image.url) {
+        brandData.image = image; // Keep as object
+      } else if (typeof image === 'string') {
+        brandData.image = { url: image }; // Convert string to object
       }
     }
-
+    
     const brand = await Brand.create(brandData);
 
     res.status(201).json({ 

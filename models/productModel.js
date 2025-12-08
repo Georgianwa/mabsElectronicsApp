@@ -10,7 +10,6 @@ const productSchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, 'Product title is required'],
-    unique: true,
     trim: true,
     maxlength: [100, 'Title cannot exceed 100 characters']
   },
@@ -25,13 +24,11 @@ const productSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Category",
     required: [true, 'Category is required'],
-    index: true
   },
   brand: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Brand",
     required: [true, 'Brand is required'],
-    index: true
   },
   price: {
     type: Number,
@@ -57,6 +54,10 @@ const productSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     index: true
+  },
+  isFeautured: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
@@ -68,7 +69,7 @@ const productSchema = new mongoose.Schema({
 productSchema.index({ category: 1, isActive: 1 });
 productSchema.index({ brand: 1, isActive: 1 });
 productSchema.index({ price: 1, isActive: 1 });
-productSchema.index({ title: 'text', description: 'text' });
+productSchema.index({ name: 'text', description: 'text' });
 
 // Virtual for stock status
 productSchema.virtual('inStock').get(function() {

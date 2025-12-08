@@ -176,9 +176,9 @@ exports.checkoutWhatsApp = (req, res) => {
 
   const message = `Hello! I would like to purchase the following items:\n\n${itemList}\n\n*Total: $${total.toFixed(2)}*\n\nPlease confirm availability.`;
   const encodedMessage = encodeURIComponent(message);
-  const sanitizedPhone = phone.replace(/[^\d+]/g, '');
+  const phoneNumber = phone.replace(/[^\d+]/g, '');
 
-  const whatsappUrl = `https://wa.me/${sanitizedPhone}?text=${encodedMessage}`;
+  const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
   
   res.status(200).json({ 
     whatsappUrl,
@@ -189,7 +189,6 @@ exports.checkoutWhatsApp = (req, res) => {
 /**
  * Checkout via Email
  * Body: { toEmail }
- * FIXED: Was using undefined 'email' variable
  */
 exports.checkoutEmail = async (req, res) => {
   const { toEmail } = req.body;

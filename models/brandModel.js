@@ -16,7 +16,7 @@ const brandSchema = new mongoose.Schema({
   },
   image: {
     url: { type: String, default: "" },
-    //publicId: { type: String, default: "" }
+    publicId: { type: String, default: "" }
   },
   createdAt: {
     type: Date,

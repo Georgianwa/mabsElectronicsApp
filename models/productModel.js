@@ -55,15 +55,14 @@ const productSchema = new mongoose.Schema({
     default: true,
     index: true
   },
-  isFeautured: {
+  isFeatured: {
     type: Boolean,
     default: false
-  }
-}, {
-  timestamps: true,
+  }},
+  {timestamps: true,
   toJSON: { getters: true },
-  toObject: { getters: true }
-});
+  toObject: { getters: true }}
+);
 
 // Compound indexes for common queries
 productSchema.index({ category: 1, isActive: 1 });

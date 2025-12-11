@@ -85,7 +85,6 @@ exports.updateItemQuantity = (req, res) => {
   if (!productId) {
     return res.status(400).json({ message: "Product ID is required" });
   }
-
   if (quantity === undefined || quantity < 0) {
     return res.status(400).json({ message: "Valid quantity is required" });
   }

@@ -17,7 +17,7 @@ exports.createProduct = async (req, res) => {
       price,
       stock,
       images, 
-      productSpecifications,
+      featured
     } = req.body;
 
     // Validate required fields
@@ -59,13 +59,16 @@ exports.createProduct = async (req, res) => {
       category,
       brand,
       price: Number(price),
-      productSpecifications: productSpecifications || {},
+      isFeatured: featured === true || featured === 'true'
     };
 
     // Add optional fields if provided
     if (productId) productData.productId = productId;
     if (stock !== undefined) productData.stock = Number(stock);
     if (images && Array.isArray(images)) productData.images = images;
+    else if (images && typeof images === 'string') productData.images = [images];
+
+    console.log('Creating product with data:', productData);
 
     const newProduct = await Product.create(productData);
 
@@ -82,7 +85,7 @@ exports.createProduct = async (req, res) => {
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ 
-        message: "Duplicate product name", 
+        message: "Duplicate product name or ID", 
         details: error.keyValue 
       });
     }
@@ -159,6 +162,27 @@ exports.getAllProducts = async (req, res) => {
   } catch (error) {
     console.error("Get products error:", error);
     res.status(500).json({ message: "Unable to retrieve products", details: error.message });
+  }
+};
+
+/**
+ * Get featured products
+ */
+exports.getFeaturedProducts = async (req, res) => {
+  try {
+    const featuredProducts = await Product.find({
+      isFeatured: true,
+      isActive: true
+    })
+    .populate("brand", "name image")
+    .populate("category", "title image")
+    .limit(8)
+    .lean();
+
+    return featuredProducts;
+  } catch (error) {
+    console.error("Error fetching featured products:", error);
+    return [];
   }
 };
 
@@ -257,7 +281,7 @@ exports.getProductById = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, category, brand, price, stock, images, productSpecifications } = req.body;
+    const { name, description, category, brand, price, stock, images, featured, productId } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid product ID format" });
@@ -300,8 +324,12 @@ exports.updateProduct = async (req, res) => {
       product.price = Number(price);
     }
     if (stock !== undefined) product.stock = Number(stock);
-    if (images && Array.isArray(images)) product.images = images;
-    if (productSpecifications) product.productSpecifications = productSpecifications;
+    if (images) {
+      if (Array.isArray(images)) product.images = images;
+      else if (typeof images === 'string') product.images = [images];
+    }
+    if (featured !== undefined) product.isFeautured = featured === true || featured === 'true';
+    if (productId) product.productId = productId;
 
     await product.save();
     await product.populate([

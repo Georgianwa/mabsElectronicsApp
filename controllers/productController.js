@@ -135,7 +135,11 @@ exports.getAllProducts = async (req, res) => {
     }
 
     const pageNum = Math.max(parseInt(page) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+    const isAdmin = req.user && req.user.role === 'admin';
+    const limitNum = isAdmin
+    ? Math.min(parseInt(limit) || 100, 1000)
+    : Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+
     const skip = (pageNum - 1) * limitNum;
 
     const selectFields = fields ? fields.split(",").join(" ") : "";

@@ -106,7 +106,7 @@ exports.getAllProducts = async (req, res) => {
       minPrice,
       maxPrice,
       page = 1,
-      limit = 10,
+      limit = 25,
       sort = "-createdAt",
       fields,
     } = req.query;
